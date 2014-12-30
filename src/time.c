@@ -22,6 +22,7 @@ unsigned int get_time(void)
 }
 #else
 #include <time.h>
+#include <unistd.h>
 #include <sys/time.h>
 
 unsigned int get_time(void)
@@ -40,6 +41,7 @@ ts.tv_nsec = tv2.tv_usec * 1000;
     tv = ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
     return tv & 0xffffffff;
 }
+
 int _kbhit(void)
 {
     struct timeval tv;
@@ -59,6 +61,9 @@ int _kbhit(void)
     return 0;
 }
 
+void Sleep(long t) {
+	usleep(t * 1000);
+}
 
 #endif
 

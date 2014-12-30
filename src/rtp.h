@@ -66,5 +66,7 @@ typedef struct
 #define PACKET_HEADER_SIZE offsetof(PACKET,data)
 
 unsigned int get_time(void);
+void Sleep(long t);
+
 void vpxlog_dbg_no_head(int level, const tc8 *format, ...);
 void vpxlog_dbg(int level, const tc8 *format, ...);

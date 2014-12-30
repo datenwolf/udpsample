@@ -43,7 +43,7 @@
 //XP SP.1+/Server 2003 have a production
 //implementation of IPv6.
 # endif
-#elif defined(LINUX) || defined(__uClinux__) || defined(__SYMBIAN32__)
+#elif defined(__linux__) || defined(LINUX) || defined(__uClinux__) || defined(__SYMBIAN32__)
 # include <unistd.h>      //for close if undefined elsewhere
 # include <sys/types.h>
 # include <sys/time.h>    //for timeval if undefined elsewhere
