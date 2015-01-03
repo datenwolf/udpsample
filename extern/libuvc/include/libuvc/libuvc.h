@@ -59,8 +59,7 @@ enum uvc_frame_format {
   UVC_FRAME_FORMAT_UNCOMPRESSED,
   UVC_FRAME_FORMAT_COMPRESSED,
   /** YUYV/YUV2/YUV422: YUV encoding with one luminance value per pixel and
-   * one UV (chrominance) pair for every two pixels.
-   */
+   * one UV (chrominance) pair for every two pixels. */
   UVC_FRAME_FORMAT_YUYV,
   UVC_FRAME_FORMAT_UYVY,
   /** 24-bit RGB */
@@ -690,6 +689,7 @@ uvc_error_t uvc_any2bgr(uvc_frame_t *in, uvc_frame_t *out);
 
 #ifdef LIBUVC_HAS_JPEG
 uvc_error_t uvc_mjpeg2rgb(uvc_frame_t *in, uvc_frame_t *out);
+uvc_error_t uvc_mjpeg2yuv_i420(uvc_frame_t *in, uvc_frame_t *out);
 #endif
 
 #ifdef __cplusplus

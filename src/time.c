@@ -30,8 +30,8 @@ unsigned int get_time(void)
     struct timespec  ts;
     unsigned long long tv;
 
-#if _POSIX_TIMERS > 0
-    clock_gettime(CLOCK_REALTIME, &ts);
+#if 1 || _POSIX_TIMERS > 0
+    clock_gettime(CLOCK_MONOTONIC, &ts);
 #else
 struct timeval tv2;
 gettimeofday(&tv2, NULL);

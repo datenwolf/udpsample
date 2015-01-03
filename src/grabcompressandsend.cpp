@@ -47,9 +47,6 @@ vpx_codec_ctx_t encoder;
 int gold_recovery_seq = 0;
 int altref_recovery_seq = 0;
 
-pthread_cond_t  frame_cnd;
-pthread_mutex_t frame_mtx;
-
 int display_width = 800;
 int display_height = 600;
 int capture_frame_rate = 30;
@@ -302,6 +299,9 @@ uvc_device_t        *uvc_dev;
 uvc_device_handle_t *uvc_devh;
 uvc_stream_ctrl_t    uvc_ctrl;
 
+pthread_cond_t  frame_cnd;
+pthread_mutex_t frame_mtx;
+
 unsigned i_frame = 0;
 
 void frame_callback(uvc_frame_t *frame, void *ptr) {
@@ -325,9 +325,8 @@ void frame_callback(uvc_frame_t *frame, void *ptr) {
 
 	// do we have room in our packet store for a frame
 	if( packetizer.add_ptr - packetizer.send_ptr < 20 ) {
-		vpx_codec_cx_pkt_t const *pkt;
-
-		fprintf(stderr, "frame> %d %d %d: %06x",
+		fprintf(stderr, "frame[%3d]> %d %d %d: %06x",
+			(int)i_frame % 1000,
 			(int)rgb->width,
 			(int)rgb->height,
 			(int)rgb->step,
@@ -341,25 +340,29 @@ void frame_callback(uvc_frame_t *frame, void *ptr) {
 	 *      
 	 *      Once I've got that I can move on to properly convert
 	 *      between color spaces / chroma subsampling. */
-		vpx_image_t vpx_rgb;
-		vpx_img_wrap(&vpx_rgb,
-			VPX_IMG_FMT_I420,
-			rgb->width,
-			rgb->height,
-			1,
-			(unsigned char*)1 );
-
-		vpx_rgb.planes[0] = (unsigned char*)rgb->data;
-		vpx_rgb.stride[0] = rgb->step;
-		vpx_rgb.planes[1] = (unsigned char*)rgb->data;
-		vpx_rgb.stride[1] = rgb->step;
-		vpx_rgb.planes[2] = (unsigned char*)rgb->data;
-		vpx_rgb.stride[2] = rgb->step;
-		vpx_rgb.planes[3] = (unsigned char*)rgb->data;
-		vpx_rgb.stride[3] = rgb->step;
+		vpx_image_t vpx_img;
+		vpx_img.fmt = VPX_IMG_FMT_I420;
+		vpx_img.bps = 8;
+		vpx_img.d_w = rgb->width,
+		vpx_img.d_h = rgb->height,
+		vpx_img.w   = rgb->width, // TODO: something something stride
+		vpx_img.h   = rgb->height,
+		vpx_img.x_chroma_shift = 1;
+		vpx_img.y_chroma_shift = 1;
+		vpx_img.self_allocd    = 0;
+		vpx_img.img_data_owner = 0;
+		vpx_img.img_data  = (unsigned char*)rgb->data;
+		vpx_img.planes[0] = (unsigned char*)rgb->data;
+		vpx_img.planes[1] = (unsigned char*)rgb->data;
+		vpx_img.planes[2] = (unsigned char*)rgb->data;
+		vpx_img.planes[3] = (unsigned char*)rgb->data;
+		vpx_img.stride[0] = rgb->width;
+		vpx_img.stride[1] = rgb->width;
+		vpx_img.stride[2] = rgb->width;
+		vpx_img.stride[3] = rgb->width;
 
 		if( VPX_CODEC_OK != vpx_codec_encode(&encoder,
-			&vpx_rgb,
+			&vpx_img,
 			i_frame,
 			1,
 			flags,
@@ -367,10 +370,11 @@ void frame_callback(uvc_frame_t *frame, void *ptr) {
 		) {
 			fputc('!', stderr);
 		}
+		fprintf(stderr, " %s ", vpx_codec_error(&encoder));
 
-		ctx_exit_on_error(&encoder, "Failed to encode frame");
-
-		for(vpx_codec_iter_t iter; (pkt = vpx_codec_get_cx_data(&encoder, &iter)); ) {
+		vpx_codec_iter_t iter;
+		vpx_codec_cx_pkt_t const *pkt;
+		while( (pkt = vpx_codec_get_cx_data(&encoder, &iter)) ) {
 			fputc('.', stderr);
 			if( pkt->kind == VPX_CODEC_CX_FRAME_PKT ) {
 				int const frame_type = request_recovery;
@@ -406,11 +410,11 @@ void frame_callback(uvc_frame_t *frame, void *ptr) {
 					gold_recovery_seq );
 			}
 		}
+		fprintf(stderr, " %s ", vpx_codec_error(&encoder));
 		fputc('\n', stderr);
 
 		i_frame++;
 
-		vpx_img_free(&vpx_rgb);
 		uvc_free_frame(rgb);
 	}
 
@@ -419,8 +423,6 @@ void frame_callback(uvc_frame_t *frame, void *ptr) {
 
 	return;
 }
-
-const int sleep_ms = 10000;
 
 int start_capture(void)
 {
@@ -468,11 +470,12 @@ int main(int argc, char *argv[])
 	printf("GrabCompressAndSend: (-? for help) \n");
 
 	vpx_codec_enc_cfg_t cfg;
-
 	vpx_codec_enc_config_default(&vpx_codec_vp8_cx_algo, &cfg, 0);
-	cfg.rc_target_bitrate = video_bitrate;
+
 	cfg.g_w = display_width;
 	cfg.g_h = display_height;
+#if 0
+	cfg.rc_target_bitrate = video_bitrate;
 	cfg.rc_end_usage = VPX_CBR;
 	cfg.g_pass = VPX_RC_ONE_PASS;
 	cfg.g_lag_in_frames = 0;
@@ -486,6 +489,7 @@ int main(int argc, char *argv[])
 	cfg.kf_mode = VPX_KF_DISABLED;
 	cfg.kf_max_dist = 999999;
 	cfg.g_threads = 1;
+#endif
 
 	int cpu_used = -6;
 	int static_threshold = 1200;
@@ -550,34 +554,26 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	struct vpxsocket vpx_socket, vpx_socket2;
-	union vpx_sockaddr_x address, address2;
+	struct vpxsocket      vpx_socket, vpx_socket2;
+	union  vpx_sockaddr_x address,    address2;
 
 	TCRV rc;
-
 	int bytes_read;
-
-#ifdef WINDOWS
-	HRESULT hr;
-	HRE(CoInitialize(NULL));
-#endif
+	int bytes_sent;
 
 	vpx_net_init();
 
 	// data send socket
 	FAIL_ON_NONZERO(vpx_net_open(&vpx_socket, vpx_IPv4, vpx_UDP))
 	FAIL_ON_NONZERO(vpx_net_get_addr_info(ip, send_port, vpx_IPv4, vpx_UDP, &address))
+
 	// feedback socket
 	FAIL_ON_NONZERO(vpx_net_open(&vpx_socket2, vpx_IPv4, vpx_UDP))
 	vpx_net_set_read_timeout(&vpx_socket2, 0);
-
 	rc = vpx_net_bind(&vpx_socket2, 0, recv_port);
 	vpx_net_set_send_timeout(&vpx_socket, vpx_NET_NO_TIMEOUT);
 
 	// make sure 2 way discussion taking place before getting started
-
-	int bytes_sent;
-
 	for(;;) {
 		char init_packet[PACKET_SIZE] = "initiate call";
 		rc = vpx_net_sendto(&vpx_socket, (tc8 *)&init_packet, PACKET_SIZE, &bytes_sent, address);
@@ -623,16 +619,19 @@ int main(int argc, char *argv[])
 	Sleep(200);
 	rc = vpx_net_sendto(&vpx_socket, (tc8 *)&init_packet, PACKET_SIZE, &bytes_sent, address);
 	fputs(init_packet, stderr);
-
-	cfg.rc_target_bitrate = video_bitrate;
+	fputc('\n', stderr);
 
 	cfg.g_w = display_width;
 	cfg.g_h = display_height;
 
 	vpx_codec_enc_init(&encoder, &vpx_codec_vp8_cx_algo, &cfg, 0);
+	fprintf(stderr, "init codec: %s\n", vpx_codec_error(&encoder));
+
+#if 0
 	vpx_codec_control_(&encoder, VP8E_SET_CPUUSED, cpu_used);
 	vpx_codec_control_(&encoder, VP8E_SET_STATIC_THRESHOLD, static_threshold);
 	vpx_codec_control_(&encoder, VP8E_SET_ENABLEAUTOALTREF, 0);
+#endif
 
 	create_packetizer(&packetizer, XOR, fec_numerator, fec_denominator);
 
@@ -759,6 +758,7 @@ int main(int argc, char *argv[])
 			}
 		}
 
+		fputs("send packet\n", stderr);
 		send_packet(&packetizer, &vpx_socket, address);
 		vpx_net_set_read_timeout(&vpx_socket2, 1);
 		

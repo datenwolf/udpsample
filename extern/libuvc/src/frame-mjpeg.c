@@ -185,3 +185,76 @@ fail:
   jpeg_destroy_decompress(&dinfo);
   return UVC_ERROR_OTHER;
 }
+
+/** @brief Convert an MJPEG frame to YUV I420
+ * @ingroup frame
+ *
+ * @param in MJPEG frame
+ * @param out YUV I420 frame
+ */
+uvc_error_t uvc_mjpeg2yuv_i420(uvc_frame_t *in, uvc_frame_t *out)
+{
+	struct jpeg_decompress_struct dinfo;
+	struct error_mgr jerr;
+	size_t lines_read;
+
+	uvc_error_t rv = 0; 
+	if (in->frame_format != UVC_FRAME_FORMAT_MJPEG)
+		return UVC_ERROR_INVALID_PARAM;
+
+	if (uvc_ensure_frame_size(out, in->width * in->height * 3) < 0)
+		return UVC_ERROR_NO_MEM;
+
+	out->width        = in->width;
+	out->height       = in->height;
+	out->frame_format = UVC_FRAME_FORMAT_YUYV;
+	out->step         = in->width * 3;
+	out->sequence     = in->sequence;
+	out->capture_time = in->capture_time;
+	out->source       = in->source;
+
+	dinfo.err = jpeg_std_error(&jerr.super);
+	jerr.super.error_exit = _error_exit;
+
+	if (setjmp(jerr.jmp)) {
+		rv = UVC_ERROR_OTHER;
+		goto fail;
+	}
+
+	jpeg_create_decompress(&dinfo);
+	jpeg_mem_src(&dinfo, in->data, in->data_bytes);
+	jpeg_read_header(&dinfo, TRUE);
+
+	if( dinfo.dc_huff_tbl_ptrs[0] == NULL ) {
+		/* This frame is missing the Huffman tables: fill in the standard ones */
+		insert_huff_tables(&dinfo);
+	}
+
+	dinfo.out_color_space = JCS_YCbCr;
+	dinfo.dct_method = JDCT_IFAST;
+
+	jpeg_start_decompress(&dinfo);
+
+	/* dcinfo.output_width and dcinfo.output_height are
+	 * available only after calling jpeg_start_decompress. */
+	if( dinfo.output_width  != out->width
+	 || dinfo.output_height != out->height ) {
+	 	rv = UVC_ERROR_OTHER;
+		goto fail_dim;
+	}
+
+	lines_read = 0;
+	while (dinfo.output_scanline < dinfo.output_height) {
+		unsigned char *buffer[1] = { out->data + lines_read * out->step };
+		int num_scanlines;
+
+		num_scanlines = jpeg_read_scanlines(&dinfo, buffer, 1);
+		lines_read += num_scanlines;
+	}
+
+fail_dim:
+	jpeg_finish_decompress(&dinfo);
+fail:
+	jpeg_destroy_decompress(&dinfo);
+	return UVC_ERROR_OTHER;
+}

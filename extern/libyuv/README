@@ -1,0 +1,4 @@
+Copy of the Google LibYUV library https://code.google.com/p/libyuv/
+
+NOTE: The source repository has been stripped to its bare essentials
+      required for an embedded build within the riftswapper project.
