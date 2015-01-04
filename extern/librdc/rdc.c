@@ -1,5 +1,5 @@
 #include "rdc.h"
-#include <libvdm/fec.h>
+#include "vdm/fec.h"
 
 #define RDC_3C5IN16(a,b,c) ( \
 	  (((unsigned int)(a)&0x1f)      ) \
@@ -9,7 +9,7 @@
 unsigned int const RDC_VERSION = 0x0101
 
 enum {
-	RDC_MAX_DATAGRAMS = 0xff,
+	RDC_MAX_DATAGRAMS = 128,
 	RDC_MAGIC   = RDC_3C5IN16('R','D','C')
 };
 
@@ -22,19 +22,30 @@ struct rdcDatagramState {
 	void  *data;
 };
 
-/* header for the redundant datagram packets. The size of the
+/* Header for the redundant datagram packets. The size of the
  * whole datagram, number of packet and redundancy are replicated
  * over all packets; this causes a small overhead, but simplifies
  * code design and aids in packet loss recovery. 
  *
- * fits nicely into an octet. */
+ * The packet size should be smaller than the Path MTU, since larger
+ * values cause fragmentation in which case loss of a single fragment
+ * means loss of all the fragments and therby packet, making packet
+ * loss more likely. This is exactly what RDC tries to counter,
+ * so it's counterproductive to uncover these issues on andother front.
+ *
+ * The maximum amount of redundancy selectable is 3:2. So with the
+ * these settings up to 1/3 of the packets may get lost without
+ * loosing the datagram, at the cost of the overhead consuming
+ * that bandwidth.
+ *
+ * Fits nicely into an octet. */
 struct rdcPacketHeader {
 	unsigned vmagic:  16; /* magic ^ version */
-	unsigned pkt_size:10; /* packet size (max 1kiB) */
-	unsigned k_packet:10; /* number of effective fragments */
+	unsigned pkt_size:11; /* packet size (max 2kiB) */
+	unsigned k_packet:10; /* number of effective packets */
 	unsigned n_extra:  9: /* number of reduandancy packets */
 	unsigned i_packet:11; /* packet index */
-	unsigned i_dgm:    8; /* datagram index */
+	unsigned i_dgm:    7; /* datagram index */
 };
 
 struct rdcContext {
@@ -162,14 +173,22 @@ int rdc_sendto( rdcContext * const ctx,
 	struct sockaddr const *src_addr,
 	socklen_t const       *addrlen )
 {
+	struct fec_parms *fec;
 	int rv;
+
 	if( (rv = rdc_context_validate_send(ctx)) ) {
 		return rv;
 	}
 
-	struct fec_parms = fec_new(...);
+	fec = fec_new(...);
+	if( !fec ) {
+		rv = RDC_ERROR_OUT_OF_MEMORY;
+		goto fail_fec_new;
+	}
 
-
-
+	
+	fec_free(fec);
+fail_fec_new:
+	return rv;
 }
 

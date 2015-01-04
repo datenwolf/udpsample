@@ -5,7 +5,6 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
 include(TargetArch)
 target_architecture(TARGET_ARCH)
 
-add_subdirectory(extern/libuvc)
-add_subdirectory(extern/libyuv)
-add_subdirectory(extern/libvdm)
+add_subdirectory(extern)
+
 add_subdirectory(src)

@@ -13,6 +13,7 @@ enum rdcError {
 	RDC_ERROR_VERSION_MISMATCH,
 	RDC_ERROR_PACKET_HEADER_INVALID,
 	RDC_ERROR_INVALID_PARAMETER,
+	RDC_ERROR_OUT_OF_MEMORY,
 };
 
 /*
@@ -20,9 +21,9 @@ enum rdcError {
  * channel, that allows for recovery from a specifiable (per datagram)
  * amount of packet loss.
  *
- * Up to 256 datagrams can be in flight simultanously, in a round robin
- * like fashion, of which the most recent 128 ones getting completed are
- * being processed. Effectively this means that once datagram n + 128th
+ * Up to 128 datagrams can be in flight simultanously, in a round robin
+ * like fashion, of which the most recent 96 ones getting completed are
+ * being processed. Effectively this means that once datagram n + 32th
  * has been received any incoming packets for datagrams in flight of
  * index <= n will be discarded.
  */
